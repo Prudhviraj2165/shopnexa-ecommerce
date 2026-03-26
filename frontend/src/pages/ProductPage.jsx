@@ -1,24 +1,34 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { ArrowLeft, Star, Truck, ShieldCheck, RotateCcw, Clock, ChevronRight, ChevronDown } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, Clock3, RotateCcw, ShieldCheck, Star, Truck } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import Loader from '../components/Loader';
 import Message from '../components/Message';
 
+const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
 const StarRating = ({ rating }) => (
-  <div style={{ display: 'flex', gap: '2px' }}>
-    {[1,2,3,4,5].map(s => (
-      <Star key={s} size={14} fill={s <= Math.round(rating) ? '#f59e0b' : 'none'} color={s <= Math.round(rating) ? '#f59e0b' : '#d1d5db'} />
+  <div className="rating-stars">
+    {[1, 2, 3, 4, 5].map((value) => (
+      <Star
+        key={value}
+        size={14}
+        fill={value <= Math.round(rating) ? '#f59e0b' : 'none'}
+        color={value <= Math.round(rating) ? '#f59e0b' : '#cbd5e1'}
+      />
     ))}
   </div>
 );
+
+const formatCurrency = (value) => `Rs. ${Number(value || 0).toFixed(0)}`;
 
 const ProductPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addToCart, cartItems } = useCart();
+  const { userInfo } = useAuth();
 
   const [product, setProduct] = useState({});
   const [related, setRelated] = useState([]);
@@ -27,9 +37,6 @@ const ProductPage = () => {
   const [qty, setQty] = useState(1);
   const [showDetails, setShowDetails] = useState(false);
   const [added, setAdded] = useState(false);
-  
-  // Reviews state
-  const { userInfo } = useAuth();
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -40,47 +47,65 @@ const ProductPage = () => {
     const fetchProduct = async () => {
       setLoading(true);
       try {
-        const { data } = await axios.get(`${import.meta.env.VITE_API_URL}/products/${id}`);
+        const { data } = await axios.get(`${apiBaseUrl}/products/${id}`);
         setProduct(data);
-        // fetch related products (same category)
-        const all = await axios.get(`${import.meta.env.VITE_API_URL}/products`);
-        setRelated(all.data.filter(p => p._id !== id && p.category === data.category).slice(0, 6));
+        const all = await axios.get(`${apiBaseUrl}/products`);
+        setRelated(all.data.filter((item) => item._id !== id && item.category === data.category).slice(0, 6));
       } catch (err) {
         setError(err.response?.data?.message || err.message);
       } finally {
         setLoading(false);
       }
     };
+
     fetchProduct();
   }, [id]);
 
-  const cartQty = cartItems.find(x => x._id === id)?.qty || 0;
-  const mrp = product.originalPrice || Math.round(product.price * 1.2);
-  const discount = Math.round(((mrp - product.price) / mrp) * 100);
-  const deliveryDate = new Date(Date.now() + 86400000).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' });
+  const cartQty = cartItems.find((item) => item._id === id)?.qty || 0;
+  const mrp = product.originalPrice || Math.round((product.price || 0) * 1.2);
+  const discount = mrp > 0 ? Math.round(((mrp - (product.price || 0)) / mrp) * 100) : 0;
+  const deliveryDate = new Date(Date.now() + 86400000).toLocaleDateString('en-IN', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short',
+  });
+
+  const trustBadges = [
+    { icon: Truck, text: 'Free delivery over Rs. 499' },
+    { icon: ShieldCheck, text: 'Authenticity guaranteed' },
+    { icon: RotateCcw, text: 'Easy replacement support' },
+  ];
+
+  const detailRows = [
+    ['Brand', product.brand],
+    ['Category', product.category],
+    ['Unit', product.unit || '1 unit'],
+    ['Stock', `${product.countInStock || 0} units available`],
+    ['Country of origin', 'India'],
+    ['Storage', 'Store in a cool, dry place'],
+  ];
 
   const handleAddToCart = () => {
     addToCart({ ...product, qty });
     setAdded(true);
-    setTimeout(() => setAdded(false), 2000);
+    setTimeout(() => setAdded(false), 1800);
   };
 
-  const submitReviewHandler = async (e) => {
-    e.preventDefault();
+  const submitReviewHandler = async (event) => {
+    event.preventDefault();
     if (rating === 0 || !comment) return;
     setReviewLoading(true);
     try {
-      const config = { 
-        headers: { 
-          ...(userInfo?.token ? { Authorization: `Bearer ${userInfo.token}` } : {}) 
-        } 
+      const config = {
+        headers: {
+          ...(userInfo?.token ? { Authorization: `Bearer ${userInfo.token}` } : {}),
+        },
       };
-      await axios.post(`${import.meta.env.VITE_API_URL}/products/${id}/reviews`, { rating, comment }, config);
+      await axios.post(`${apiBaseUrl}/products/${id}/reviews`, { rating, comment }, config);
       setReviewSuccess(true);
       setRating(0);
       setComment('');
-      // Refresh product
-      const { data } = await axios.get(`${import.meta.env.VITE_API_URL}/products/${id}`);
+      const { data } = await axios.get(`${apiBaseUrl}/products/${id}`);
       setProduct(data);
       setTimeout(() => setReviewSuccess(false), 3000);
     } catch (err) {
@@ -95,225 +120,231 @@ const ProductPage = () => {
   if (error) return <Message variant="danger">{error}</Message>;
 
   return (
-    <div className="animate-fade-in" style={{ paddingBottom: '80px' }}>
-      {/* Top nav */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px 0', marginBottom: '8px' }}>
-        <button onClick={() => navigate(-1)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontWeight: 600 }}>
-          <ArrowLeft size={18} /> Back
+    <div className="product-page animate-fade-in">
+      <div className="product-breadcrumb">
+        <button className="product-back" onClick={() => navigate(-1)} type="button">
+          <ArrowLeft size={16} />
+          Back
         </button>
-        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-          Home <ChevronRight size={12} /> {product.category} <ChevronRight size={12} /> {product.name}
-        </span>
+        <div className="product-breadcrumb__trail">
+          <span>Home</span>
+          <ChevronRight size={12} />
+          <span>{product.category}</span>
+          <ChevronRight size={12} />
+          <span>{product.name}</span>
+        </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '40px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        {/* IMAGE */}
-        <div style={{ flex: '1 1 380px', position: 'sticky', top: '80px' }}>
-          <div className="glass-card" style={{ padding: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '380px', borderRadius: '20px' }}>
+      <section className="product-hero">
+        <div className="product-gallery-card">
+          <div className="product-gallery-card__image">
+            {discount > 0 && <span className="product-gallery-card__badge">{discount}% off</span>}
             <img
               src={product.image}
               alt={product.name}
-              style={{ maxWidth: '100%', maxHeight: '340px', objectFit: 'contain', borderRadius: '12px' }}
-              onError={(e) => { e.currentTarget.src = `https://placehold.co/400x400/1a1d26/94a3b8?text=${encodeURIComponent((product.name || 'Product').slice(0, 8))}`; }}
+              onError={(event) => {
+                event.currentTarget.src = `https://placehold.co/500x500/0f172a/e2e8f0?text=${encodeURIComponent((product.name || 'Item').slice(0, 8))}`;
+              }}
             />
           </div>
-          {/* Trust badges */}
-          <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
-            {[
-              { icon: <Truck size={14} />, text: 'Free Delivery above ₹499' },
-              { icon: <ShieldCheck size={14} />, text: '100% Authentic' },
-              { icon: <RotateCcw size={14} />, text: '7-day return' },
-            ].map((b, i) => (
-              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', padding: '10px 6px', background: 'var(--card-bg)', borderRadius: '10px', border: '1px solid var(--border-color)', textAlign: 'center', fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                <span style={{ color: 'var(--primary-color)' }}>{b.icon}</span> {b.text}
+
+          <div className="product-trust-grid">
+            {trustBadges.map((badge) => (
+              <div className="product-trust-card" key={badge.text}>
+                <span>
+                  <badge.icon size={16} />
+                </span>
+                <p>{badge.text}</p>
               </div>
             ))}
           </div>
         </div>
 
-        {/* INFO */}
-        <div style={{ flex: '2 1 380px' }}>
-          {/* Category pill */}
-          <span style={{ background: 'rgba(29,185,84,0.1)', color: 'var(--primary-color)', padding: '4px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 700 }}>
-            {product.category}
-          </span>
+        <div className="product-info-card">
+          <span className="product-category-pill">{product.category}</span>
+          <h1>{product.name}</h1>
+          <p className="product-subhead">
+            {product.brand} • {product.unit || '1 unit'} • In cart: {cartQty}
+          </p>
 
-          <h1 style={{ fontSize: '1.7rem', fontWeight: 900, margin: '12px 0 6px', lineHeight: 1.2 }}>{product.name}</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '12px' }}>{product.brand} · {product.unit || '1 unit'}</p>
-
-          {/* Rating */}
           {product.rating > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-              <div style={{ background: product.rating >= 4 ? '#1db954' : product.rating >= 3 ? '#f59e0b' : '#ef4444', color: '#fff', padding: '3px 8px', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                {product.rating?.toFixed(1)} <Star size={12} fill="#fff" color="#fff" />
-              </div>
-              <StarRating rating={product.rating} />
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>({product.numReviews} ratings)</span>
-            </div>
-          )}
-
-          {/* Price block */}
-          <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '20px', marginBottom: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '2rem', fontWeight: 900, color: 'var(--text-color)' }}>₹{product.price}</span>
-              <span style={{ fontSize: '1.1rem', color: 'var(--text-muted)', textDecoration: 'line-through' }}>₹{mrp}</span>
-              <span style={{ background: '#dcfce7', color: '#16a34a', padding: '4px 10px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 800 }}>
-                {discount}% OFF
+            <div className="product-rating-row">
+              <span className="product-rating-badge">
+                {product.rating?.toFixed(1)}
+                <Star size={12} fill="#fff" color="#fff" />
               </span>
-            </div>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '6px' }}>Inclusive of all taxes</p>
-          </div>
-
-          {/* Delivery */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '14px 16px', background: 'rgba(29,185,84,0.06)', border: '1px solid rgba(29,185,84,0.2)', borderRadius: '12px', marginBottom: '20px' }}>
-            <Truck size={18} color="var(--primary-color)" />
-            <div>
-              <span style={{ fontWeight: 700, color: 'var(--text-color)', fontSize: '0.9rem' }}>Earliest delivery by </span>
-              <span style={{ color: 'var(--primary-color)', fontWeight: 800, fontSize: '0.9rem' }}>{deliveryDate}</span>
-            </div>
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary-color)', fontWeight: 700, fontSize: '0.8rem' }}>
-              <Clock size={12} /> 10 mins express
-            </div>
-          </div>
-
-          {/* Stock badge */}
-          {product.countInStock > 0 && product.countInStock <= 10 && (
-            <div style={{ color: '#ef4444', fontWeight: 700, fontSize: '0.85rem', marginBottom: '14px' }}>
-              ⚠️ Only {product.countInStock} left in stock — order soon!
+              <StarRating rating={product.rating} />
+              <small>{product.numReviews} ratings</small>
             </div>
           )}
 
-          {/* Qty + Add to Cart */}
-          {product.countInStock > 0 ? (
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', border: '2px solid var(--primary-color)', borderRadius: '12px', overflow: 'hidden' }}>
-                <button onClick={() => setQty(q => Math.max(1, q - 1))} style={{ width: '44px', height: '48px', background: 'transparent', border: 'none', color: 'var(--primary-color)', fontSize: '1.4rem', cursor: 'pointer', fontWeight: 800 }}>−</button>
-                <span style={{ padding: '0 16px', fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-color)' }}>{qty}</span>
-                <button onClick={() => setQty(q => Math.min(product.countInStock, q + 1))} style={{ width: '44px', height: '48px', background: 'transparent', border: 'none', color: 'var(--primary-color)', fontSize: '1.4rem', cursor: 'pointer', fontWeight: 800 }}>+</button>
+          <div className="product-price-card">
+            <div>
+              <strong>{formatCurrency(product.price)}</strong>
+              <div className="product-price-card__sub">
+                <span>{formatCurrency(mrp)}</span>
+                {discount > 0 && <em>{discount}% off</em>}
               </div>
-              <button
-                className="btn btn-primary"
-                style={{ flex: 1, padding: '14px', fontWeight: 800, fontSize: '1rem', borderRadius: '12px', transition: 'all 0.2s', background: added ? '#16a34a' : 'var(--primary-color)' }}
-                onClick={handleAddToCart}
-              >
-                {added ? '✓ Added to Cart!' : `Add to Cart · ₹${(product.price * qty).toFixed(0)}`}
+            </div>
+            <p>Inclusive of all taxes</p>
+          </div>
+
+          <div className="product-delivery-banner">
+            <div>
+              <strong>Earliest delivery by {deliveryDate}</strong>
+              <span>Fast handling from your nearest available store.</span>
+            </div>
+            <span className="delivery-pill">
+              <Clock3 size={12} />
+              10 min
+            </span>
+          </div>
+
+          {product.countInStock > 0 && product.countInStock <= 10 && (
+            <p className="product-stock-warning">Only {product.countInStock} left in stock. Order soon.</p>
+          )}
+
+          {product.countInStock > 0 ? (
+            <div className="product-purchase-row">
+              <div className="qty-stepper qty-stepper--light qty-stepper--large">
+                <button onClick={() => setQty((current) => Math.max(1, current - 1))} type="button">
+                  -
+                </button>
+                <span>{qty}</span>
+                <button onClick={() => setQty((current) => Math.min(product.countInStock, current + 1))} type="button">
+                  +
+                </button>
+              </div>
+
+              <button className="add-button add-button--wide" onClick={handleAddToCart} type="button">
+                {added ? 'Added to cart' : `Add to cart • ${formatCurrency(product.price * qty)}`}
               </button>
             </div>
           ) : (
-            <div style={{ background: '#fee2e2', color: '#dc2626', padding: '14px', borderRadius: '12px', fontWeight: 700, textAlign: 'center', marginBottom: '20px' }}>
-              Out of Stock
-            </div>
+            <div className="product-out-of-stock">Out of stock</div>
           )}
 
-          {/* Description */}
-          <p style={{ color: 'var(--text-muted)', lineHeight: 1.7, fontSize: '0.9rem', marginBottom: '20px' }}>{product.description}</p>
+          <div className="product-description-card">
+            <h3>About this item</h3>
+            <p>{product.description}</p>
+          </div>
 
-          {/* Expandable details */}
-          <button
-            onClick={() => setShowDetails(d => !d)}
-            style={{ width: '100%', padding: '14px 16px', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', fontWeight: 700, color: 'var(--text-color)', marginBottom: showDetails ? '0' : '0' }}
-          >
-            Product Details
-            <ChevronDown size={18} style={{ transform: showDetails ? 'rotate(180deg)' : 'none', transition: '0.2s' }} />
+          <button className="product-details-toggle" onClick={() => setShowDetails((current) => !current)} type="button">
+            <span>Product details</span>
+            <ChevronDown size={18} style={{ transform: showDetails ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }} />
           </button>
+
           {showDetails && (
-            <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderTop: 'none', borderRadius: '0 0 12px 12px', padding: '16px' }}>
-              {[
-                ['Brand', product.brand],
-                ['Category', product.category],
-                ['Unit', product.unit || '1 unit'],
-                ['Stock', `${product.countInStock} units available`],
-                ['Country of Origin', 'India'],
-                ['Shelf Life', '6 months from manufacture'],
-                ['Storage', 'Store in a cool, dry place'],
-              ].map(([k, v]) => (
-                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border-color)', fontSize: '0.88rem' }}>
-                  <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>{k}</span>
-                  <span style={{ fontWeight: 700 }}>{v}</span>
+            <div className="product-details-panel">
+              {detailRows.map(([label, value]) => (
+                <div className="product-details-row" key={label}>
+                  <span>{label}</span>
+                  <strong>{value}</strong>
                 </div>
               ))}
             </div>
           )}
         </div>
-      </div>
+      </section>
 
-      {/* Reviews Section */}
-      <div style={{ marginTop: '48px', maxWidth: '1300px' }}>
-        <h2 style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '20px' }}>Customer Reviews</h2>
-        <div style={{ display: 'flex', gap: '40px', flexWrap: 'wrap' }}>
-          
-          {/* Write Review */}
-          <div style={{ flex: '1 1 300px', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '24px' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '16px' }}>Write a Review</h3>
-            {reviewError && <Message variant="danger">{reviewError}</Message>}
-            {reviewSuccess && <Message variant="success">Review submitted successfully!</Message>}
-            {userInfo ? (
-              <form onSubmit={submitReviewHandler}>
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 700, marginBottom: '8px', color: 'var(--text-color)' }}>Rating</label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    {[1,2,3,4,5].map(s => (
-                      <Star key={s} size={28} onClick={() => setRating(s)} fill={s <= rating ? '#f59e0b' : 'none'} color={s <= rating ? '#f59e0b' : 'var(--border-color)'} style={{ cursor: 'pointer', transition: '0.2s' }} />
-                    ))}
-                  </div>
-                </div>
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 700, marginBottom: '8px', color: 'var(--text-color)' }}>Comment</label>
-                  <textarea value={comment} onChange={e => setComment(e.target.value)} rows="4" style={{ width: '100%', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'var(--bg-color)', color: 'var(--text-color)', fontSize: '0.9rem', resize: 'vertical' }} placeholder="What did you like or dislike?" required></textarea>
-                </div>
-                <button type="submit" disabled={reviewLoading} className="btn btn-primary" style={{ width: '100%', padding: '12px', borderRadius: '8px', fontWeight: 700 }}>
-                  {reviewLoading ? 'Submitting...' : 'Submit Review'}
-                </button>
-              </form>
-            ) : (
-              <p style={{ color: 'var(--text-muted)' }}>Required to <a href="/login" style={{ color: 'var(--primary-color)', fontWeight: 600 }}>log in</a> to write a review.</p>
-            )}
-          </div>
+      <section className="product-section-grid">
+        <div className="review-card">
+          <h2>Write a review</h2>
+          {reviewError && <Message variant="danger">{reviewError}</Message>}
+          {reviewSuccess && <Message variant="success">Review submitted successfully.</Message>}
 
-          {/* Review List */}
-          <div style={{ flex: '2 1 400px' }}>
-            {product.reviews && product.reviews.length === 0 ? (
-              <div style={{ padding: '32px', textAlign: 'center', background: 'var(--card-bg)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
-                <p style={{ color: 'var(--text-muted)', margin: 0 }}>No reviews yet. Be the first to review!</p>
+          {userInfo ? (
+            <form className="review-form" onSubmit={submitReviewHandler}>
+              <div>
+                <label>Rating</label>
+                <div className="review-stars-input">
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <Star
+                      key={value}
+                      size={28}
+                      onClick={() => setRating(value)}
+                      fill={value <= rating ? '#f59e0b' : 'none'}
+                      color={value <= rating ? '#f59e0b' : 'var(--border-color)'}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  ))}
+                </div>
               </div>
-            ) : (
-              <div style={{ display: 'grid', gap: '16px' }}>
-                {product.reviews && product.reviews.map(review => (
-                  <div key={review._id} style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                      <div>
-                        <p style={{ margin: '0 0 4px 0', fontWeight: 700, fontSize: '0.95rem' }}>{review.name}</p>
-                        <StarRating rating={review.rating} />
-                      </div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{review.createdAt.substring(0, 10)}</span>
-                    </div>
-                    <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-color)', lineHeight: 1.5 }}>{review.comment}</p>
-                  </div>
-                ))}
+
+              <div>
+                <label>Comment</label>
+                <textarea
+                  value={comment}
+                  onChange={(event) => setComment(event.target.value)}
+                  rows="4"
+                  placeholder="Tell other shoppers what stood out."
+                  required
+                />
               </div>
-            )}
-          </div>
+
+              <button className="add-button add-button--wide" disabled={reviewLoading} type="submit">
+                {reviewLoading ? 'Submitting...' : 'Submit review'}
+              </button>
+            </form>
+          ) : (
+            <p className="review-login-note">
+              Please <a href="/login">log in</a> to write a review.
+            </p>
+          )}
         </div>
-      </div>
 
-      {/* Related Products */}
+        <div className="review-list-card">
+          <h2>Customer reviews</h2>
+          {product.reviews?.length ? (
+            <div className="review-list">
+              {product.reviews.map((review) => (
+                <article className="review-item" key={review._id}>
+                  <div className="review-item__top">
+                    <div>
+                      <strong>{review.name}</strong>
+                      <StarRating rating={review.rating} />
+                    </div>
+                    <span>{review.createdAt.substring(0, 10)}</span>
+                  </div>
+                  <p>{review.comment}</p>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-review-state">No reviews yet. Be the first to review this product.</div>
+          )}
+        </div>
+      </section>
+
       {related.length > 0 && (
-        <div style={{ marginTop: '48px' }}>
-          <h2 style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '20px' }}>Customers Also Bought</h2>
-          <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '8px' }}>
-            {related.map(p => (
-              <div key={p._id} onClick={() => navigate(`/product/${p._id}`)}
-                style={{ minWidth: '160px', maxWidth: '160px', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '12px', cursor: 'pointer', transition: 'transform 0.2s' }}
-                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'}
-                onMouseLeave={e => e.currentTarget.style.transform = 'none'}>
-                <img src={p.image} alt={p.name} style={{ width: '100%', height: '110px', objectFit: 'contain', marginBottom: '10px' }}
-                  onError={e => { e.currentTarget.src = `https://placehold.co/160x110/1a1d26/94a3b8?text=${p.name.slice(0,4)}`; }} />
-                <p style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
-                <p style={{ color: 'var(--primary-color)', fontWeight: 800, fontSize: '0.9rem' }}>₹{p.price}</p>
-              </div>
+        <section className="surface-panel surface-panel--compact">
+          <div className="section-row">
+            <div>
+              <span className="section-kicker">More like this</span>
+              <h2>Customers also bought</h2>
+            </div>
+          </div>
+
+          <div className="spotlight-row">
+            {related.map((item) => (
+              <button className="spotlight-card" key={item._id} onClick={() => navigate(`/product/${item._id}`)} type="button">
+                <div className="spotlight-card__image">
+                  <img
+                    src={item.image}
+                    alt={item.name}
+                    onError={(event) => {
+                      event.currentTarget.src = `https://placehold.co/160x160/0f172a/e2e8f0?text=${encodeURIComponent(item.name.slice(0, 4))}`;
+                    }}
+                  />
+                </div>
+                <div className="spotlight-card__body">
+                  <strong>{item.name}</strong>
+                  <span>{formatCurrency(item.price)}</span>
+                </div>
+              </button>
             ))}
           </div>
-        </div>
+        </section>
       )}
     </div>
   );
