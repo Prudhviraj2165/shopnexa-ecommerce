@@ -968,6 +968,277 @@ main {
   gap: 8px;
 }
 
+/* ===== INSTAMART DUAL COLUMN LAYOUT ===== */
+.instamart-page-root {
+  display: flex;
+  background: var(--bg-color);
+  min-height: calc(100vh - 72px); /* height below header */
+  width: 100%;
+}
+
+.instamart-sidebar {
+  width: 240px;
+  background: var(--card-bg);
+  border-right: 1px solid var(--border-color);
+  position: sticky;
+  top: 72px; 
+  height: calc(100vh - 72px);
+  overflow-y: auto;
+  padding: 16px 0;
+  flex-shrink: 0;
+}
+
+.instamart-sidebar::-webkit-scrollbar { width: 5px; }
+.instamart-sidebar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 4px; }
+.dark-mode-override .instamart-sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+
+.sidebar-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  color: var(--text-color);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-left: 3px solid transparent;
+}
+
+.sidebar-menu-item:hover {
+  background: rgba(0,0,0,0.03);
+}
+.dark-mode-override .sidebar-menu-item:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+.sidebar-menu-item.active {
+  background: rgba(29, 185, 84, 0.08);
+  border-left-color: var(--swiggy-orange);
+  color: var(--swiggy-orange);
+}
+
+.instamart-main {
+  flex: 1;
+  min-width: 0;
+  padding: 0 0 80px 0; /* space for mobile cart */
+  overflow-x: hidden;
+}
+
+/* Horizontal Carousels */
+.insta-carousel-section {
+  padding: 30px 40px;
+  border-bottom: 8px solid rgba(0,0,0,0.02);
+}
+.dark-mode-override .insta-carousel-section {
+  border-bottom: 8px solid rgba(255,255,255,0.02);
+}
+
+.insta-carousel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 24px;
+}
+
+.insta-carousel-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text-color);
+  margin: 0;
+  letter-spacing: -0.5px;
+}
+
+.insta-carousel-track {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 16px;
+  scrollbar-width: none;
+  scroll-snap-type: x mandatory;
+}
+
+.insta-carousel-track::-webkit-scrollbar { display: none; }
+
+.insta-product-card {
+  width: 190px;
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 14px;
+  background: var(--card-bg);
+  transition: transform 0.2s, box-shadow 0.2s;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.insta-product-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.06);
+}
+.dark-mode-override .insta-product-card:hover {
+  box-shadow: 0 12px 30px rgba(0,0,0,0.4);
+}
+
+.insta-time-pill {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: #f0f4fd;
+  color: #1a4cd2;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 3px 6px;
+  border-radius: 6px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.dark-mode-override .insta-time-pill {
+  background: rgba(26, 76, 210, 0.2);
+  color: #8daeff;
+}
+
+.insta-product-img {
+  width: 100%;
+  aspect-ratio: 1;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
+.insta-product-img img {
+  width: 85%;
+  height: 85%;
+  object-fit: contain;
+  transition: transform 0.3s;
+}
+
+.insta-product-card:hover .insta-product-img img {
+  transform: scale(1.1);
+}
+
+.insta-product-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-color);
+  line-height: 1.35;
+  margin-bottom: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  height: 2.7em;
+}
+
+.insta-product-weight {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 14px;
+  flex: 1;
+}
+
+.insta-price-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+}
+
+.insta-price {
+  display: flex;
+  flex-direction: column;
+}
+
+.insta-price-current {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-color);
+}
+
+.insta-price-old {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.insta-add-btn {
+  background: rgba(29, 185, 84, 0.1);
+  color: var(--swiggy-orange);
+  border: 1px solid rgba(29, 185, 84, 0.4);
+  font-weight: 800;
+  font-size: 0.85rem;
+  padding: 6px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.insta-add-btn:hover {
+  background: var(--swiggy-orange);
+  color: #fff;
+}
+
+.insta-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--swiggy-orange);
+  color: #fff;
+  border-radius: 8px;
+  height: 32px;
+  width: 76px;
+  overflow: hidden;
+}
+.insta-stepper button {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-weight: 800;
+  font-size: 1.1rem;
+  width: 26px;
+  height: 100%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.insta-stepper button:hover {
+  background: rgba(0,0,0,0.1);
+}
+.insta-stepper span {
+  font-size: 0.9rem;
+  font-weight: 700;
+  flex: 1;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .instamart-sidebar {
+    display: none;
+  }
+  .instamart-page-root {
+    flex-direction: column;
+  }
+  .insta-carousel-section {
+    padding: 16px;
+  }
+  .insta-product-card {
+    width: 150px;
+  }
+}
+
 /* ===== LOCATION MODAL STYLES ===== */
 .modal-overlay {
   position: fixed;
