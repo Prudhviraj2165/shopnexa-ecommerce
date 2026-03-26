@@ -1,49 +1,146 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
-import { Search, MapPin, User as UserIcon, ShoppingBag, Zap, Sun, Moon, Clock, SlidersHorizontal, ChevronDown, Store, LayoutDashboard, LogOut, Package } from 'lucide-react';
+import {
+  ArrowRight,
+  Beef,
+  Candy,
+  ChevronDown,
+  Clock3,
+  Flame,
+  GlassWater,
+  LayoutGrid,
+  Leaf,
+  MapPin,
+  Milk,
+  Moon,
+  Search,
+  ShoppingBag,
+  SlidersHorizontal,
+  Snowflake,
+  Sparkles,
+  Store,
+  Sun,
+  Waves,
+} from 'lucide-react';
+import { io } from 'socket.io-client';
 import { useTheme } from '../context/ThemeContext';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import { io } from 'socket.io-client';
+import { useLocation } from '../context/LocationContext';
 import Loader from '../components/Loader';
 import Message from '../components/Message';
 import LocationModal from '../components/LocationModal';
-import { useLocation } from '../context/LocationContext';
 
-const socket = io(import.meta.env.VITE_API_URL.replace('/api', ''));
+const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const socketBaseUrl = apiBaseUrl.replace(/\/api\/?$/, '');
+const socket = io(socketBaseUrl, { autoConnect: true });
 
-import { useRef } from 'react';
+const sortOptions = [
+  { value: 'relevance', label: 'Relevance' },
+  { value: 'price_asc', label: 'Price: Low to High' },
+  { value: 'price_desc', label: 'Price: High to Low' },
+  { value: 'rating', label: 'Top Rated' },
+];
+
+const categoryMap = {
+  All: ['Fruits', 'Vegetables', 'Dairy', 'Bakery', 'Grocery', 'Grocery & Kitchen', 'Snacks', 'Beverages', 'Frozen', 'Personal Care', 'Household', 'Breakfast', 'Instant Food', 'Meat', 'Fish', 'Seafood', 'Pet Care'],
+  'Fruits & Vegetables': ['Fruits', 'Vegetables'],
+  'Dairy & Bread': ['Dairy', 'Bakery'],
+  'Snacks & Munchies': ['Snacks'],
+  'Cold Drinks & Juices': ['Beverages'],
+  'Breakfast & Instant Food': ['Breakfast', 'Instant Food'],
+  'Meat & Fish': ['Meat', 'Fish', 'Seafood'],
+  'Pet Care': ['Pet Care'],
+  'Grocery & Kitchen': ['Grocery', 'Grocery & Kitchen'],
+  'Personal Care': ['Personal Care'],
+  'Household Needs': ['Household'],
+  Frozen: ['Frozen'],
+};
+
+const categoryChips = [
+  { name: 'All', icon: LayoutGrid },
+  { name: 'Fruits & Vegetables', icon: Leaf },
+  { name: 'Dairy & Bread', icon: Milk },
+  { name: 'Snacks & Munchies', icon: Candy },
+  { name: 'Cold Drinks & Juices', icon: GlassWater },
+  { name: 'Breakfast & Instant Food', icon: Flame },
+  { name: 'Meat & Fish', icon: Beef },
+  { name: 'Pet Care', icon: Sparkles },
+  { name: 'Grocery & Kitchen', icon: ShoppingBag },
+  { name: 'Personal Care', icon: Waves },
+  { name: 'Household Needs', icon: Sparkles },
+  { name: 'Frozen', icon: Snowflake },
+];
+
+const sections = [
+  { title: 'Fresh picks for today', icon: Leaf, categories: ['Fruits', 'Vegetables', 'Dairy', 'Bakery'] },
+  { title: 'Kitchen staples', icon: ShoppingBag, categories: ['Grocery', 'Grocery & Kitchen'] },
+  { title: 'Snacks and drinks', icon: Candy, categories: ['Snacks', 'Beverages', 'Frozen'] },
+  { title: 'Personal care', icon: Sparkles, categories: ['Personal Care'] },
+  { title: 'Household essentials', icon: Waves, categories: ['Household'] },
+  { title: 'Breakfast and instant food', icon: Flame, categories: ['Breakfast', 'Instant Food'] },
+];
+
+const dealCards = [
+  {
+    title: 'Save 10% on your first basket',
+    subtitle: 'Apply SAVE10 at checkout and stock up smarter.',
+    tag: 'New user offer',
+    accent: 'green',
+    action: '/coupons',
+  },
+  {
+    title: 'Free delivery above Rs. 499',
+    subtitle: 'Plan a weekly restock and skip the delivery fee.',
+    tag: 'Limited period',
+    accent: 'gold',
+  },
+  {
+    title: 'Fresh arrivals every morning',
+    subtitle: 'Seasonal produce and essentials updated daily.',
+    tag: 'Just added',
+    accent: 'blue',
+  },
+];
+
+const serviceHighlights = [
+  '10-minute grocery delivery',
+  'Live stock visibility',
+  'Daily fresh restocks',
+];
+
+const formatCurrency = (value) => `Rs. ${Number(value || 0).toFixed(0)}`;
+
 const HomePage = () => {
   const { theme, toggleTheme } = useTheme();
-  const { userInfo, logout } = useAuth();
+  const { userInfo } = useAuth();
   const { addToCart, cartItems, removeFromCart } = useCart();
+  const { location, status: locationStatus, detectLocation, setManualLocation } = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+
   const [products, setProducts] = useState([]);
   const [stores, setStores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const { location, status: locationStatus, detectLocation, setManualLocation } = useLocation();
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('keyword') || '');
   const [locationLoading, setLocationLoading] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [savedAddresses, setSavedAddresses] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
-  
-  // Sort and Filter state
   const [sortBy, setSortBy] = useState('relevance');
   const [filterInStock, setFilterInStock] = useState(false);
   const [filterDiscount, setFilterDiscount] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
-
-  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
         const [prodRes, storeRes] = await Promise.all([
-          axios.get(`${import.meta.env.VITE_API_URL}/products`),
-          axios.get(`${import.meta.env.VITE_API_URL}/stores`)
+          axios.get(`${apiBaseUrl}/products`),
+          axios.get(`${apiBaseUrl}/stores`),
         ]);
         setProducts(prodRes.data);
         setStores(storeRes.data);
@@ -54,504 +151,568 @@ const HomePage = () => {
         setLoading(false);
       }
     };
+
     fetchData();
 
-    // Load saved addresses
     const saved = localStorage.getItem('allAddresses');
-    if (saved) setSavedAddresses(JSON.parse(saved));
+    if (saved) {
+      setSavedAddresses(JSON.parse(saved));
+    }
   }, []);
 
   useEffect(() => {
     socket.on('productUpdate', (updatedProduct) => {
-      setProducts(prev => prev.map(p => p._id === updatedProduct._id ? updatedProduct : p));
+      setProducts((prev) => prev.map((product) => (product._id === updatedProduct._id ? updatedProduct : product)));
     });
     socket.on('productCreated', (newProduct) => {
-      setProducts(prev => [newProduct, ...prev]);
+      setProducts((prev) => [newProduct, ...prev]);
     });
+
     return () => {
       socket.off('productUpdate');
       socket.off('productCreated');
     };
   }, []);
 
+  useEffect(() => {
+    setSearchTerm(searchParams.get('keyword') || '');
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (locationStatus === 'done' || locationStatus === 'error') {
+      setLocationLoading(false);
+      if (locationStatus === 'done') {
+        setShowLocationModal(false);
+      }
+    }
+  }, [locationStatus]);
+
   const handleGetLocation = () => {
     setLocationLoading(true);
     detectLocation();
   };
 
-  useEffect(() => {
-    if (locationStatus === 'done' || locationStatus === 'error') {
-      setLocationLoading(false);
-      if (locationStatus === 'done') setShowLocationModal(false);
-    }
-  }, [locationStatus]);
-
-  const handleSelectAddress = (addr) => {
-    setManualLocation(addr);
+  const handleSelectAddress = (address) => {
+    setManualLocation(address);
     setShowLocationModal(false);
   };
 
-  const categoryMap = {
-    'All': ['Fruits', 'Vegetables', 'Dairy', 'Bakery', 'Grocery', 'Grocery & Kitchen', 'Snacks', 'Beverages', 'Frozen', 'Personal Care', 'Household', 'Breakfast', 'Instant Food'],
-    'Fruits & Vegetables': ['Fruits', 'Vegetables'],
-    'Dairy & Bread': ['Dairy', 'Bakery'],
-    'Snacks & Munchies': ['Snacks'],
-    'Cold Drinks & Juices': ['Beverages'],
-    'Grocery & Kitchen': ['Grocery', 'Grocery & Kitchen'],
-    'Personal Care': ['Personal Care'],
-    'Household Needs': ['Household'],
-    'Breakfast & Instant Food': ['Breakfast', 'Instant Food'],
-    'Meat & Fish': ['Meat', 'Fish'],
-    'Pet Care': ['Pet Care']
+  const handleSearchChange = (value) => {
+    setSearchTerm(value);
+    if (value.trim()) {
+      setSearchParams({ keyword: value.trim() });
+    } else {
+      setSearchParams({});
+    }
   };
 
-  const sections = [
-    {
-      title: 'Fresh items',
-      icon: '🥬',
-      categories: ['Fruits', 'Vegetables', 'Dairy', 'Bakery']
-    },
-    {
-      title: 'Grocery & Kitchen',
-      icon: '🥣',
-      categories: ['Grocery', 'Grocery & Kitchen']
-    },
-    {
-      title: 'Snacks & Drinks',
-      icon: '🥤',
-      categories: ['Snacks', 'Beverages', 'Frozen']
-    },
-    {
-      title: 'Personal Care',
-      icon: '🧴',
-      categories: ['Personal Care']
-    },
-    {
-      title: 'Household essentials',
-      icon: '🧼',
-      categories: ['Household']
-    },
-    {
-      title: 'Breakfast & Instant Food',
-      icon: '🍳',
-      categories: ['Breakfast', 'Instant Food']
-    }
-  ];
+  const getQty = (id) => cartItems.find((item) => item._id === id)?.qty || 0;
 
-  const filteredSections = sections.map(section => {
-    // Determine which categories in this section match the selected category
-    const activeCategories = section.categories.filter(cat =>
-      categoryMap[selectedCategory].includes(cat)
+  const locString = `${location?.line1 || ''} ${location?.line2 || ''}`.toLowerCase();
+
+  const localStores = useMemo(
+    () =>
+      [...stores].sort((a, b) => {
+        const aCityMatch = a.city && locString.includes(a.city.toLowerCase()) ? 1 : 0;
+        const bCityMatch = b.city && locString.includes(b.city.toLowerCase()) ? 1 : 0;
+        if (aCityMatch !== bCityMatch) return bCityMatch - aCityMatch;
+
+        const aAddr = a.address ? a.address.split(',')[0].toLowerCase().trim() : '';
+        const bAddr = b.address ? b.address.split(',')[0].toLowerCase().trim() : '';
+        const aAddrMatch = aAddr && locString.includes(aAddr) ? 1 : 0;
+        const bAddrMatch = bAddr && locString.includes(bAddr) ? 1 : 0;
+        if (aAddrMatch !== bAddrMatch) return bAddrMatch - aAddrMatch;
+
+        return (b.rating || 0) - (a.rating || 0);
+      }),
+    [locString, stores]
+  );
+
+  const matchingStores = useMemo(() => {
+    if (!searchTerm) return [];
+    return stores.filter(
+      (store) =>
+        store.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        store.description?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [searchTerm, stores]);
+
+  const filteredSections = useMemo(() => {
+    const visibleSections = sections
+      .map((section) => {
+        const activeCategories = section.categories.filter((category) => categoryMap[selectedCategory].includes(category));
+
+        let items = products.filter(
+          (product) =>
+            activeCategories.includes(product.category) &&
+            (product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              product.brand?.toLowerCase().includes(searchTerm.toLowerCase()))
+        );
+
+        if (filterInStock) items = items.filter((product) => product.countInStock > 0);
+        if (filterDiscount) items = items.filter((product) => product.originalPrice && product.originalPrice > product.price);
+
+        if (sortBy === 'price_asc') items = [...items].sort((a, b) => a.price - b.price);
+        else if (sortBy === 'price_desc') items = [...items].sort((a, b) => b.price - a.price);
+        else if (sortBy === 'rating') items = [...items].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+
+        return { ...section, items };
+      })
+      .filter((section) => section.items.length > 0);
+
+    const displayedProductIds = new Set(visibleSections.flatMap((section) => section.items.map((item) => item._id)));
+    const remainingProducts = products.filter(
+      (product) =>
+        !displayedProductIds.has(product._id) &&
+        (product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          product.brand?.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
-    let items = products.filter(p =>
-      activeCategories.includes(p.category) &&
-      (p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.brand.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
-
-    // Apply Filters
-    if (filterInStock) items = items.filter(p => p.countInStock > 0);
-    if (filterDiscount) items = items.filter(p => p.originalPrice && p.originalPrice > p.price);
-
-    // Apply Sorting
-    if (sortBy === 'price_asc') items.sort((a, b) => a.price - b.price);
-    else if (sortBy === 'price_desc') items.sort((a, b) => b.price - a.price);
-    else if (sortBy === 'rating') items.sort((a, b) => b.rating - a.rating);
-
-    return {
-      ...section,
-      items
-    };
-  }).filter(section => section.items.length > 0);
-
-  // --- Matching Stores (New Sensible Discovery) ---
-  const matchingStores = searchTerm ? stores.filter(s => 
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.description?.toLowerCase().includes(searchTerm.toLowerCase())
-  ) : [];
-
-  // --- Explore More Section (All products not in listed sections) ---
-  const displayedProductIds = new Set(filteredSections.flatMap(s => s.items.map(i => i._id)));
-  const remainingProducts = products.filter(p => !displayedProductIds.has(p._id) && 
-    (p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-     p.brand.toLowerCase().includes(searchTerm.toLowerCase())));
-  
-  if (remainingProducts.length > 0) {
-    filteredSections.push({
-      title: 'Explore More',
-      icon: '✨',
-      items: remainingProducts
-    });
-  }
-
-  const categories = [
-    { name: 'All', icon: '✨' },
-    { 
-      name: 'Fruits & Vegetables', 
-      icon: '🍎', 
-      categories: ['Vegetables', 'Fruits'] 
-    },
-    { 
-      name: 'Dairy & Bread', 
-      icon: '🥛', 
-      categories: ['Dairy', 'Bakery'] 
-    },
-    { 
-      name: 'Snacks & Munchies', 
-      icon: '🥨', 
-      categories: ['Snacks'] 
-    },
-    { 
-      name: 'Cold Drinks & Juices', 
-      icon: '🥤', 
-      categories: ['Beverages'] 
-    },
-    { 
-      name: 'Breakfast & Instant Food', 
-      icon: '🍳', 
-      categories: ['Breakfast', 'Instant Food'] 
-    },
-    { 
-      name: 'Meat & Fish', 
-      icon: '🍗', 
-      categories: ['Meat', 'Seafood'] 
-    },
-    { 
-      name: 'Pet Care', 
-      icon: '🐶', 
-      categories: ['Pet Care'] 
-    },
-    { 
-      name: 'Grocery & Kitchen', 
-      icon: '🧂', 
-      categories: ['Grocery', 'Grocery & Kitchen'] 
-    },
-    { 
-      name: 'Personal Care', 
-      icon: '🧼', 
-      categories: ['Personal Care'] 
-    },
-    { 
-      name: 'Household Needs', 
-      icon: '🧹', 
-      categories: ['Household'] 
-    },
-    { 
-      name: 'Frozen', 
-      icon: '🍦', 
-      categories: ['Frozen'] 
+    if (remainingProducts.length > 0) {
+      visibleSections.push({
+        title: 'Explore more',
+        icon: Sparkles,
+        items: remainingProducts,
+      });
     }
-  ];
 
-  const getQty = (id) => cartItems.find(x => x._id === id)?.qty || 0;
+    return visibleSections;
+  }, [filterDiscount, filterInStock, products, searchTerm, selectedCategory, sortBy]);
 
-  // Location-based store sorting logic
-  const locString = ((location?.line1 || '') + " " + (location?.line2 || '')).toLowerCase();
-  const localStores = [...stores].sort((a, b) => {
-    const aCityMatch = (a.city && locString.includes(a.city.toLowerCase())) ? 1 : 0;
-    const bCityMatch = (b.city && locString.includes(b.city.toLowerCase())) ? 1 : 0;
-    if (aCityMatch !== bCityMatch) return bCityMatch - aCityMatch;
-    
-    const aAddr = a.address ? a.address.split(',')[0].toLowerCase().trim() : '';
-    const bAddr = b.address ? b.address.split(',')[0].toLowerCase().trim() : '';
-    const aAddrMatch = (aAddr && locString.includes(aAddr)) ? 1 : 0;
-    const bAddrMatch = (bAddr && locString.includes(bAddr)) ? 1 : 0;
-    if (aAddrMatch !== bAddrMatch) return bAddrMatch - aAddrMatch;
-    
-    return (b.rating || 0) - (a.rating || 0);
-  });
+  const cartCount = cartItems.reduce((sum, item) => sum + item.qty, 0);
+  const cartTotal = cartItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const heroTitle = searchTerm ? `Results for "${searchTerm}"` : 'Groceries that feel premium, delivered fast.';
+  const heroSubtitle = searchTerm
+    ? 'Browse matching products and nearby stores with cleaner filters and quicker add-to-cart actions.'
+    : 'A polished home for everyday essentials, fresh produce, pantry restocks, and quick treats.';
+  const quickCategoryCards = categoryChips.slice(1, 9);
+  const spotlightProducts = products.slice(0, 6);
 
   return (
-    <div className={`swiggy-web animate-fade-in ${theme === 'dark' ? 'dark-mode-override' : ''}`} style={{ paddingBottom: '100px' }}>
+    <div className={`home-shell ${theme === 'dark' ? 'dark-mode-override' : ''}`}>
+      <section className="home-hero">
+        <div className="home-hero__backdrop" />
+        <div className="home-hero__inner">
+          <header className="home-topbar">
+            <button className="brand-lockup" onClick={() => navigate('/')} type="button">
+              <span className="brand-lockup__icon">
+                <ShoppingBag size={26} />
+              </span>
+              <span className="brand-lockup__text">
+                Shop<span>nexa</span>
+              </span>
+            </button>
 
-      {/* 1. Shopnexa Web Header (Refined Premium) */}
-      <header className="swiggy-web-header">
-        <div className="swiggy-logo-section">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }} onClick={() => navigate('/')}>
-            <div style={{ background: '#1db954', borderRadius: '10px', padding: '8px', boxShadow: '0 4px 12px rgba(29,185,84,0.3)' }}>
-              <ShoppingBag size={28} color="#fff" />
-            </div>
-            <span style={{ fontSize: '1.6rem', fontWeight: '900', color: '#1db954', letterSpacing: '-1.5px' }}>Shop<span style={{ color: theme === 'dark' ? '#fff' : '#101217' }}>nexa</span></span>
-          </div>
+            <button className="topbar-location" onClick={() => setShowLocationModal(true)} type="button">
+              <span className="topbar-location__icon">
+                <MapPin size={18} />
+              </span>
+              <span className="topbar-location__text">
+                <strong>{locationLoading ? 'Detecting your area...' : location.line1 || 'Choose delivery location'}</strong>
+                <small>{location.line2 || 'See nearby stores and delivery estimates'}</small>
+              </span>
+            </button>
 
-          <div
-            className="swiggy-location-web-new"
-            onClick={() => setShowLocationModal(true)}
-          >
-            <div className="loc-icon-box">
-              <MapPin size={22} color="#1db954" strokeWidth={3} />
-            </div>
-            <div className="loc-text-content">
-              <span className="loc-label">Deliver to</span>
-              <div className="loc-main">
-                <span className="loc-city">{locationLoading ? 'Detecting...' : (location.line1 || 'Add your location')}</span>
-                <span className="loc-arrow">▾</span>
-              </div>
-              <span className="loc-subtext">{location.line2 || 'To see items in your area'}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="swiggy-search-web" style={{ height: '52px', maxWidth: '600px' }}>
-          <input
-            type="text"
-            placeholder='Search for "Grocery, Milk, Eggs..."'
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ fontSize: '1.05rem' }}
-          />
-          <Search size={22} color="#686b78" />
-        </div>
-
-        <div className="swiggy-nav-right">
-          {/* Theme Toggle */}
-          <div
-            className="swiggy-nav-item"
-            onClick={toggleTheme}
-            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-            style={{ padding: '8px', borderRadius: '50%', background: theme === 'dark' ? '#1a1d26' : '#f0f2f5' }}
-          >
-            {theme === 'dark' ? <Sun size={24} color="#1db954" /> : <Moon size={24} color="#1db954" />}
-          </div>
-
-
-          <div className="swiggy-nav-item" style={{ position: 'relative' }}>
-            <div 
-              onClick={() => navigate(userInfo ? '/profile' : '/login')}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
-            >
-              <UserIcon size={24} color={theme === 'dark' ? '#fff' : '#282c3f'} />
-              <span style={{ color: theme === 'dark' ? '#fff' : '#282c3f' }}>
+            <div className="topbar-actions">
+              <button className="icon-toggle" onClick={toggleTheme} type="button" aria-label="Toggle theme">
+                {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
+              <button className="account-pill" onClick={() => navigate(userInfo ? '/profile' : '/login')} type="button">
                 {userInfo ? userInfo.name.split(' ')[0] : 'Sign In'}
-              </span>
+              </button>
+              <button className="cart-pill" onClick={() => navigate('/cart')} type="button">
+                <ShoppingBag size={18} />
+                <span>{cartCount > 0 ? formatCurrency(cartTotal) : 'My Cart'}</span>
+                {cartCount > 0 && <strong>{cartCount}</strong>}
+              </button>
             </div>
-          </div>
+          </header>
 
-          <div
-            className="swiggy-cart-btn-web"
-            onClick={() => navigate('/cart')}
-            style={{
-              cursor: 'pointer',
-              background: '#1db954',
-              color: '#fff',
-              position: 'relative'
-            }}
-          >
-            <ShoppingBag size={20} color="#fff" />
-            <span>{cartItems.length > 0 ? `₹${cartItems.reduce((acc, i) => acc + (i.price * i.qty), 0)}` : 'My Cart'}</span>
-            {cartItems.length > 0 && (
-              <span style={{ position: 'absolute', top: '-8px', right: '-8px', background: '#ff3d00', padding: '2px 8px', borderRadius: '20px', fontSize: '0.7rem' }}>
-                {cartItems.length}
-              </span>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* 2. Sub-Category Ribbon (Instamart Style) */}
-      <div className="sub-cat-ribbon-wrap">
-        <div className="sub-cat-ribbon" style={{ maxWidth: '1300px', margin: '0 auto' }}>
-          {categories.map(cat => (
-            <div
-              key={cat.name}
-              className={`sub-cat-item ${selectedCategory === cat.name ? 'active' : ''}`}
-              onClick={() => setSelectedCategory(cat.name)}
-            >
-              <span className="sub-cat-icon">{cat.icon}</span>
-              <span className="sub-cat-label">{cat.name}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 3. Deals Banner */}
-      <div style={{ maxWidth: '1300px', margin: '0 auto', padding: '20px 16px 0' }}>
-        <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '4px' }}>
-          {[
-            { bg: 'linear-gradient(135deg,#1db954 0%,#17a549 100%)', emoji: '🏷️', title: 'Use code SAVE10', sub: '10% off on your first order' },
-            { bg: 'linear-gradient(135deg,#f59e0b 0%,#d97706 100%)', emoji: '🚚', title: 'Free Delivery', sub: 'On orders above ₹499' },
-            { bg: 'linear-gradient(135deg,#6366f1 0%,#4f46e5 100%)', emoji: '🎁', title: 'New Arrivals', sub: 'Fresh stock added daily' },
-            { bg: 'linear-gradient(135deg,#ef4444 0%,#dc2626 100%)', emoji: '⚡', title: '10-min Express', sub: 'Ultra-fast grocery delivery' },
-          ].map((b, i) => (
-            <div key={i} onClick={() => i === 0 && navigate('/coupons')} style={{ background: b.bg, borderRadius: '16px', padding: '18px 22px', minWidth: '220px', flex: '1 0 220px', display: 'flex', alignItems: 'center', gap: '14px', cursor: 'pointer', transition: 'transform 0.2s, box-shadow 0.2s', maxWidth: '280px' }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.15)'; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}>
-              <span style={{ fontSize: '2rem' }}>{b.emoji}</span>
-              <div>
-                <p style={{ margin: 0, fontWeight: 900, fontSize: '1rem', color: '#fff' }}>{b.title}</p>
-                <p style={{ margin: 0, fontSize: '0.78rem', color: 'rgba(255,255,255,0.85)', marginTop: '2px' }}>{b.sub}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 4. Popular Stores Carousel (Sensible Stores Discovery) */}
-      {!searchTerm && selectedCategory === 'All' && stores.length > 0 && (
-        <div style={{ maxWidth: '1300px', margin: '0 auto', padding: '32px 20px 0' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h2 style={{ fontWeight: 900, margin: 0, fontSize: '1.4rem' }}>Popular Stores Near You</h2>
-            <span onClick={() => navigate('/stores')} style={{ color: '#1db954', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer' }}>View All →</span>
-          </div>
-          <div style={{ display: 'flex', gap: '24px', overflowX: 'auto', paddingBottom: '12px', scrollbarWidth: 'none' }}>
-            {localStores.slice(0, 10).map(s => (
-              <div 
-                key={s._id} 
-                onClick={() => navigate(`/store/${s._id}`)}
-                style={{ flex: '0 0 140px', cursor: 'pointer', textAlign: 'center' }}
-              >
-                <div style={{ position: 'relative', width: '100%', aspectRatio: '1', borderRadius: '50%', overflow: 'hidden', border: '1px solid var(--border-color)', marginBottom: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', background: 'var(--card-bg)' }}>
-                  <img src={s.logo} alt={s.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                    onError={e => { e.currentTarget.src = `https://placehold.co/140x140/1db954/fff?text=${encodeURIComponent(s.name.slice(0, 1))}`; }} />
-                </div>
-                <div style={{ fontWeight: 800, fontSize: '0.88rem', color: 'var(--text-color)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>{s.deliveryTime}</div>
-              </div>
+          <div className="home-service-strip">
+            {serviceHighlights.map((item) => (
+              <span key={item}>{item}</span>
             ))}
           </div>
-        </div>
-      )}
 
-      {/* 3.5. Sort & Filter Bar */}
-      <div style={{ maxWidth: '1300px', margin: '0 auto', padding: '16px 20px 0', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative' }}>
-          <button 
-            onClick={() => setShowSortMenu(!showSortMenu)}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '20px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-color)', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
-            <SlidersHorizontal size={14} /> 
-            Sort by: {sortBy === 'relevance' ? 'Relevance' : sortBy === 'price_asc' ? 'Price: Low to High' : sortBy === 'price_desc' ? 'Price: High to Low' : 'Rating'} 
-            <ChevronDown size={14} />
-          </button>
-          
-          {showSortMenu && (
-            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '8px', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 100, minWidth: '180px', overflow: 'hidden' }}>
-              {[
-                { value: 'relevance', label: 'Relevance' },
-                { value: 'price_asc', label: 'Price: Low to High' },
-                { value: 'price_desc', label: 'Price: High to Low' },
-                { value: 'rating', label: 'Rating' }
-              ].map(opt => (
-                <div 
-                  key={opt.value} 
-                  onClick={() => { setSortBy(opt.value); setShowSortMenu(false); }}
-                  style={{ padding: '10px 16px', fontSize: '0.85rem', cursor: 'pointer', background: sortBy === opt.value ? 'rgba(29,185,84,0.1)' : 'transparent', color: sortBy === opt.value ? 'var(--primary-color)' : 'var(--text-color)', fontWeight: sortBy === opt.value ? 700 : 500 }}
-                  onMouseEnter={e => e.currentTarget.style.background = sortBy === opt.value ? 'rgba(29,185,84,0.1)' : 'var(--bg-color)'}
-                  onMouseLeave={e => e.currentTarget.style.background = sortBy === opt.value ? 'rgba(29,185,84,0.1)' : 'transparent'}
-                >
-                  {opt.label}
+          <div className="home-hero__content">
+            <div className="home-hero__copy">
+              <span className="hero-kicker">
+                <Sparkles size={16} />
+                Refined grocery storefront
+              </span>
+              <h1>{heroTitle}</h1>
+              <p>{heroSubtitle}</p>
+
+              <div className="hero-search">
+                <Search size={20} />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(event) => handleSearchChange(event.target.value)}
+                  placeholder="Search milk, bread, fruits, snacks..."
+                />
+              </div>
+
+              <div className="hero-stats">
+                <div className="hero-stat">
+                  <strong>{products.length || '0'}</strong>
+                  <span>Products live now</span>
                 </div>
+                <div className="hero-stat">
+                  <strong>{stores.length || '0'}</strong>
+                  <span>Stores around you</span>
+                </div>
+                <div className="hero-stat">
+                  <strong>10 min</strong>
+                  <span>Average fast delivery</span>
+                </div>
+              </div>
+            </div>
+
+            <aside className="hero-panel">
+              <span className="hero-panel__eyebrow">Today&apos;s experience</span>
+              <h2>Closer to a real instant-delivery app home.</h2>
+              <div className="hero-panel__promo">
+                <strong>Free delivery on first order</strong>
+                <span>Use SAVE10 and unlock a cleaner onboarding offer block.</span>
+              </div>
+              <div className="hero-panel__mini-grid">
+                {quickCategoryCards.slice(0, 4).map((chip) => {
+                  const Icon = chip.icon;
+                  return (
+                    <button
+                      key={chip.name}
+                      className="hero-mini-category"
+                      onClick={() => setSelectedCategory(chip.name)}
+                      type="button"
+                    >
+                      <Icon size={18} />
+                      <span>{chip.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <div className="home-content">
+        {!searchTerm && (
+          <section className="surface-panel quick-explore-panel">
+            <div className="section-row">
+              <div>
+                <span className="section-kicker">Browse fast</span>
+                <h2>Popular aisles</h2>
+              </div>
+            </div>
+
+            <div className="quick-explore-grid">
+              {quickCategoryCards.map((chip) => {
+                const Icon = chip.icon;
+                return (
+                  <button
+                    key={chip.name}
+                    className="quick-explore-card"
+                    onClick={() => setSelectedCategory(chip.name)}
+                    type="button"
+                  >
+                    <span className="quick-explore-card__icon">
+                      <Icon size={20} />
+                    </span>
+                    <strong>{chip.name}</strong>
+                    <small>Fresh picks and quick essentials</small>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        <section className="deal-strip">
+          {dealCards.map((deal) => (
+            <button
+              key={deal.title}
+              className={`deal-card deal-card--${deal.accent}`}
+              onClick={() => deal.action && navigate(deal.action)}
+              type="button"
+            >
+              <span>{deal.tag}</span>
+              <strong>{deal.title}</strong>
+              <p>{deal.subtitle}</p>
+              <ArrowRight size={18} />
+            </button>
+          ))}
+        </section>
+
+        {!searchTerm && spotlightProducts.length > 0 && (
+          <section className="surface-panel surface-panel--compact">
+            <div className="section-row">
+              <div>
+                <span className="section-kicker">Quick add</span>
+                <h2>Trending essentials</h2>
+              </div>
+            </div>
+
+            <div className="spotlight-row">
+              {spotlightProducts.map((product) => (
+                <button
+                  key={product._id}
+                  className="spotlight-card"
+                  onClick={() => navigate(`/product/${product._id}`)}
+                  type="button"
+                >
+                  <div className="spotlight-card__image">
+                    <img src={product.image} alt={product.name} />
+                  </div>
+                  <div className="spotlight-card__body">
+                    <strong>{product.name}</strong>
+                    <span>{formatCurrency(product.price)}</span>
+                  </div>
+                </button>
               ))}
             </div>
-          )}
-        </div>
+          </section>
+        )}
 
-        <button 
-          onClick={() => setFilterInStock(!filterInStock)}
-          style={{ padding: '8px 14px', borderRadius: '20px', border: `1px solid ${filterInStock ? 'var(--primary-color)' : 'var(--border-color)'}`, background: filterInStock ? 'rgba(29,185,84,0.1)' : 'var(--card-bg)', color: filterInStock ? 'var(--primary-color)' : 'var(--text-color)', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}>
-          In Stock Only
-        </button>
+        {!searchTerm && selectedCategory === 'All' && localStores.length > 0 && (
+          <section className="surface-panel">
+            <div className="section-row">
+              <div>
+                <span className="section-kicker">Nearby favourites</span>
+                <h2>Popular stores around you</h2>
+              </div>
+              <button className="text-link" onClick={() => navigate('/stores')} type="button">
+                View all
+              </button>
+            </div>
 
-        <button 
-          onClick={() => setFilterDiscount(!filterDiscount)}
-          style={{ padding: '8px 14px', borderRadius: '20px', border: `1px solid ${filterDiscount ? '#f59e0b' : 'var(--border-color)'}`, background: filterDiscount ? 'rgba(245,158,11,0.1)' : 'var(--card-bg)', color: filterDiscount ? '#f59e0b' : 'var(--text-color)', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}>
-          Offers
-        </button>
-      </div>
-
-      {/* 4. Web Style Categorized Content */}
-      <div className="swiggy-web-content" style={{ maxWidth: '1300px', margin: '0 auto' }}>
-        {loading ? <Loader /> : error ? <Message variant="danger">{error}</Message> : (
-          <>
-            {/* Matching Stores Section (Sensible Discovery) */}
-            {searchTerm && matchingStores.length > 0 && (
-              <div style={{ marginBottom: '40px', padding: '24px', background: 'rgba(29,185,84,0.05)', borderRadius: '24px', border: '1px solid rgba(29,185,84,0.1)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Store size={22} color="var(--primary-color)" />
-                    <h2 style={{ fontWeight: 900, margin: 0, fontSize: '1.3rem' }}>Matching Stores</h2>
+            <div className="store-carousel">
+              {localStores.slice(0, 8).map((store) => (
+                <button
+                  key={store._id}
+                  className="store-card"
+                  onClick={() => navigate(`/store/${store._id}`)}
+                  type="button"
+                >
+                  <div className="store-card__image">
+                    <img
+                      src={store.logo}
+                      alt={store.name}
+                      onError={(event) => {
+                        event.currentTarget.src = `https://placehold.co/160x160/1db954/ffffff?text=${encodeURIComponent(store.name.slice(0, 1))}`;
+                      }}
+                    />
                   </div>
-                  <span onClick={() => navigate('/stores')} style={{ color: 'var(--primary-color)', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer' }}>See all stores</span>
-                </div>
-                <div style={{ display: 'flex', gap: '20px', overflowX: 'auto', paddingBottom: '12px', scrollbarWidth: 'none' }}>
-                  {matchingStores.map(s => (
-                    <div key={s._id} onClick={() => navigate(`/store/${s._id}`)} style={{ flex: '0 0 280px', cursor: 'pointer', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '18px', padding: '16px' }} 
-                      onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--primary-color)'}
-                      onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-color)'}>
-                      <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                        <div style={{ position: 'relative', width: '60px', height: '60px', borderRadius: '14px', overflow: 'hidden', border: '1px solid var(--border-color)', background: 'var(--bg-color)' }}>
-                          <img src={s.logo} alt={s.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            onError={e => { e.currentTarget.src = `https://placehold.co/60x60/1db954/fff?text=${encodeURIComponent(s.name.slice(0, 1))}`; }} />
-                        </div>
-                        <div style={{ overflow: 'hidden' }}>
-                          <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--text-color)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</div>
-                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>{s.deliveryTime} • ₹{s.minOrder || 0} min</div>
-                        </div>
-                      </div>
-                    </div>
+                  <div className="store-card__body">
+                    <strong>{store.name}</strong>
+                    <span>{store.deliveryTime || 'Fast delivery'}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section className="controls-bar">
+          <div className="category-ribbon">
+            {categoryChips.map((chip) => {
+              const Icon = chip.icon;
+              return (
+                <button
+                  key={chip.name}
+                  className={`category-chip ${selectedCategory === chip.name ? 'is-active' : ''}`}
+                  onClick={() => setSelectedCategory(chip.name)}
+                  type="button"
+                >
+                  <Icon size={16} />
+                  <span>{chip.name}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="filter-row">
+            <div className="sort-dropdown">
+              <button className="filter-pill" onClick={() => setShowSortMenu((prev) => !prev)} type="button">
+                <SlidersHorizontal size={16} />
+                <span>{sortOptions.find((option) => option.value === sortBy)?.label}</span>
+                <ChevronDown size={16} />
+              </button>
+
+              {showSortMenu && (
+                <div className="sort-menu">
+                  {sortOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      className={`sort-menu__item ${sortBy === option.value ? 'is-active' : ''}`}
+                      onClick={() => {
+                        setSortBy(option.value);
+                        setShowSortMenu(false);
+                      }}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
                   ))}
                 </div>
-              </div>
-            )}
-            {filteredSections.map(section => (
-            <div key={section.title} className="swiggy-web-section">
-              <h2 className="swiggy-web-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  {section.icon} {section.title}
-                </span>
-                <span style={{ fontSize: '0.9rem', color: '#1db954', cursor: 'pointer' }}>View all ▾</span>
-              </h2>
-              <div className="swiggy-web-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', alignItems: 'stretch' }}>
-                {section.items.slice(0, 8).map(p => (
-                  <div key={p._id} className="swiggy-web-card">
-                    <div className="swiggy-badge-top">
-                      <div className="delivery-badge">
-                        <Clock size={12} fill="currentColor" /> 10 mins
-                      </div>
-                    </div>
-
-                    <div className="swiggy-web-img-box" onClick={() => navigate(`/product/${p._id}`)}>
-                      <img src={p.image} alt={p.name} />
-                    </div>
-
-                    <div className="swiggy-web-info" onClick={() => navigate(`/product/${p._id}`)}>
-                      <span className="swiggy-web-label">{p.name}</span>
-                      <div style={{ fontSize: '0.8rem', color: '#686b78', marginBottom: 'auto' }}>{p.brand || 'Fresh Produce'} • {p.unit || '1 unit'}</div>
-
-                      <div className="swiggy-web-price-box">
-                        <div className="swiggy-price-val">₹{p.price}</div>
-
-                        {getQty(p._id) === 0 ? (
-                          <button className="swiggy-add-btn" onClick={(e) => { e.stopPropagation(); addToCart({ ...p, qty: 1 }); }}>ADD</button>
-                        ) : (
-                          <div className="qty-stepper" onClick={(e) => e.stopPropagation()} style={{ transform: 'scale(0.85)', background: '#fff' }}>
-                            <button onClick={() => removeFromCart(p._id)} style={{ background: 'transparent', color: '#1db954' }}>−</button>
-                            <span style={{ color: '#1db954' }}>{getQty(p._id)}</span>
-                            <button onClick={() => addToCart({ ...p, qty: getQty(p._id) + 1 })} style={{ background: 'transparent', color: '#1db954' }}>+</button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              )}
             </div>
-            ))}
+
+            <button
+              className={`filter-pill ${filterInStock ? 'is-active' : ''}`}
+              onClick={() => setFilterInStock((prev) => !prev)}
+              type="button"
+            >
+              In stock only
+            </button>
+            <button
+              className={`filter-pill ${filterDiscount ? 'is-accent' : ''}`}
+              onClick={() => setFilterDiscount((prev) => !prev)}
+              type="button"
+            >
+              Offers
+            </button>
+          </div>
+        </section>
+
+        {loading ? (
+          <Loader />
+        ) : error ? (
+          <Message variant="danger">{error}</Message>
+        ) : (
+          <>
+            {searchTerm && matchingStores.length > 0 && (
+              <section className="surface-panel surface-panel--highlight">
+                <div className="section-row">
+                  <div>
+                    <span className="section-kicker">Store matches</span>
+                    <h2>Stores relevant to your search</h2>
+                  </div>
+                  <button className="text-link" onClick={() => navigate('/stores')} type="button">
+                    Explore stores
+                  </button>
+                </div>
+
+                <div className="matching-store-grid">
+                  {matchingStores.map((store) => (
+                    <button
+                      key={store._id}
+                      className="matching-store-card"
+                      onClick={() => navigate(`/store/${store._id}`)}
+                      type="button"
+                    >
+                      <div className="matching-store-card__icon">
+                        <Store size={20} />
+                      </div>
+                      <div className="matching-store-card__body">
+                        <strong>{store.name}</strong>
+                        <span>{store.description || store.deliveryTime || 'Open for fast delivery'}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {filteredSections.map((section) => {
+              const SectionIcon = section.icon;
+
+              return (
+                <section key={section.title} className="product-section">
+                  <div className="section-row">
+                    <div>
+                      <span className="section-kicker">Curated section</span>
+                      <h2>
+                        <SectionIcon size={20} />
+                        {section.title}
+                      </h2>
+                    </div>
+                    <button className="text-link" onClick={() => setSelectedCategory('All')} type="button">
+                      Browse more
+                    </button>
+                  </div>
+
+                  <div className="product-grid">
+                    {section.items.slice(0, 8).map((product) => {
+                      const qty = getQty(product._id);
+                      const hasDiscount = product.originalPrice && product.originalPrice > product.price;
+
+                      return (
+                        <article className="product-tile" key={product._id}>
+                          <button className="product-tile__image" onClick={() => navigate(`/product/${product._id}`)} type="button">
+                            {hasDiscount && (
+                              <span className="product-tile__badge">
+                                {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% off
+                              </span>
+                            )}
+                            <img src={product.image} alt={product.name} />
+                          </button>
+
+                          <div className="product-tile__body">
+                            <div className="product-tile__meta">
+                              <span className="delivery-pill">
+                                <Clock3 size={12} />
+                                10 min
+                              </span>
+                              <span>{product.brand || 'Fresh selection'}</span>
+                            </div>
+
+                            <button className="product-tile__title" onClick={() => navigate(`/product/${product._id}`)} type="button">
+                              {product.name}
+                            </button>
+
+                            <p className="product-tile__unit">{product.unit || '1 unit pack'}</p>
+
+                            <div className="product-tile__footer">
+                              <div className="product-tile__price">
+                                <strong>{formatCurrency(product.price)}</strong>
+                                {hasDiscount && <span>{formatCurrency(product.originalPrice)}</span>}
+                              </div>
+
+                              {qty === 0 ? (
+                                <button
+                                  className="add-button"
+                                  onClick={() => addToCart({ ...product, qty: 1 })}
+                                  type="button"
+                                  disabled={product.countInStock === 0}
+                                >
+                                  {product.countInStock === 0 ? 'Out of stock' : 'Add'}
+                                </button>
+                              ) : (
+                                <div className="qty-stepper qty-stepper--light">
+                                  <button onClick={() => removeFromCart(product._id)} type="button">
+                                    -
+                                  </button>
+                                  <span>{qty}</span>
+                                  <button
+                                    onClick={() => addToCart({ ...product, qty: qty + 1 })}
+                                    type="button"
+                                    disabled={qty >= product.countInStock}
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
           </>
         )}
-      </div>
 
-      {/* 3. Sticky Promo Footer (Cleaned) */}
-      <div className="swiggy-sticky-footer" style={{
-        borderTop: `1px solid ${theme === 'dark' ? '#2d334a' : '#e2f2f0'}`,
-        background: theme === 'dark' ? '#0b0e14' : '#f1fffb',
-        padding: '16px 20px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#1db954', padding: '10px 24px', borderRadius: '30px', color: '#fff', fontWeight: 800 }}>
-          <Zap size={18} fill="#fff" />
-          <span>FREE DELIVERY on orders above ₹149</span>
-          <span style={{ opacity: 0.8, fontSize: '0.8rem', marginLeft: 'auto' }}>Limited Time Only</span>
-        </div>
+        <section className="bottom-banner">
+          <div>
+            <span className="section-kicker">Delivery promise</span>
+            <h2>Free delivery on orders above Rs. 149</h2>
+          </div>
+          <p>Built to feel cleaner, easier to scan, and faster to shop from any screen size.</p>
+        </section>
       </div>
 
       <LocationModal
